@@ -166,6 +166,42 @@ describe("searchCardsByName", () => {
     const setCodes = results.map((c) => c.setCode).sort();
     expect(setCodes).toEqual(["C20", "C21"]);
   });
+
+  test("filters by binderType 'deck'", () => {
+    // Sol Ring exists in both binder (Boxed) and deck (Zurgo)
+    const results = searchCardsByName(db, "Sol Ring", 5, "deck");
+    expect(results.length).toBe(1);
+    expect(results[0]!.binderType).toBe("deck");
+    expect(results[0]!.binderName).toBe("Zurgo");
+  });
+
+  test("filters by binderType 'binder'", () => {
+    const results = searchCardsByName(db, "Sol Ring", 5, "binder");
+    expect(results.length).toBe(1);
+    expect(results[0]!.binderType).toBe("binder");
+    expect(results[0]!.binderName).toBe("Boxed");
+  });
+
+  test("binderType filter returns empty when no matches in that type", () => {
+    // Counterspell only exists in binder, not in any deck
+    const results = searchCardsByName(db, "Counterspell", 5, "deck");
+    expect(results.length).toBe(0);
+  });
+
+  test("binderType filter works with Levenshtein fallback", () => {
+    // "Sol Rign" won't LIKE match anything, so Levenshtein fallback kicks in.
+    // It should find "Sol Ring" as the closest match and only return deck copies.
+    const results = searchCardsByName(db, "Sol Rign", 5, "deck");
+    expect(results[0]!.name).toBe("Sol Ring");
+    expect(results.every((c) => c.binderType === "deck")).toBe(true);
+  });
+
+  test("no binderType returns both types", () => {
+    const results = searchCardsByName(db, "Sol Ring");
+    const types = new Set(results.map((c) => c.binderType));
+    expect(types.has("binder")).toBe(true);
+    expect(types.has("deck")).toBe(true);
+  });
 });
 
 describe("listDecks", () => {

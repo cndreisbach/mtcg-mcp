@@ -86,6 +86,11 @@ export function createDatabase(dbPath: string): Database {
  * Bulk-import parsed cards into the database inside a transaction.
  */
 export function importCards(db: Database, cards: Card[]): void {
+  // TODO Drop cards before import
+  const drop = db.prepare(`
+    DELETE FROM cards
+  `);
+
   const insert = db.prepare(`
     INSERT INTO cards (
       binder_name, binder_type, name, set_code, set_name,
@@ -101,6 +106,9 @@ export function importCards(db: Database, cards: Card[]): void {
   `);
 
   const runImport = db.transaction((cards: Card[]) => {
+    // Drop all cards before inserting others
+    drop.run();
+
     for (const card of cards) {
       insert.run(
         card.binderName,
@@ -119,7 +127,7 @@ export function importCards(db: Database, cards: Card[]): void {
         card.altered ? 1 : 0,
         card.condition,
         card.language,
-        card.purchasePriceCurrency
+        card.purchasePriceCurrency,
       );
     }
   });
@@ -133,20 +141,34 @@ export function importCards(db: Database, cards: Card[]): void {
  * Phase 1: Use LIKE for substring matches (fast, index-assisted).
  * Phase 2: Rank results by Levenshtein distance.
  * Fallback: If LIKE finds nothing, scan all distinct names with Levenshtein.
+ *
+ * An optional binderType filter restricts results to "binder" or "deck" entries.
  */
 export function searchCardsByName(
   db: Database,
   query: string,
-  limit = 5
+  limit = 5,
+  binderType?: "binder" | "deck",
 ): Card[] {
   // Phase 1: LIKE substring match on distinct names
   const likePattern = `%${query}%`;
-  const likeResults = db
-    .query<{ name: string }, [string]>(
-      "SELECT DISTINCT name FROM cards WHERE name LIKE ?1"
-    )
-    .all(likePattern)
-    .map((r) => r.name);
+  let likeResults: string[];
+
+  if (binderType) {
+    likeResults = db
+      .query<{ name: string }, [string, string]>(
+        "SELECT DISTINCT name FROM cards WHERE name LIKE ?1 AND binder_type = ?2",
+      )
+      .all(likePattern, binderType)
+      .map((r) => r.name);
+  } else {
+    likeResults = db
+      .query<{ name: string }, [string]>(
+        "SELECT DISTINCT name FROM cards WHERE name LIKE ?1",
+      )
+      .all(likePattern)
+      .map((r) => r.name);
+  }
 
   let matchedNames: string[];
 
@@ -154,11 +176,38 @@ export function searchCardsByName(
     // Phase 2: Rank LIKE results by Levenshtein distance
     matchedNames = findClosestMatches(query, likeResults, limit);
   } else {
-    // Fallback: full scan of all distinct names
-    const allNames = db
-      .query<{ name: string }, []>("SELECT DISTINCT name FROM cards")
-      .all()
-      .map((r) => r.name);
+    // Fallback: Levenshtein scan for typo correction.
+    // When a binderType filter is active, first check if the name exists at all
+    // (without the type filter). If it does, the card simply isn't in the requested
+    // type — return empty rather than suggesting unrelated cards.
+    if (binderType) {
+      const untypedLike = db
+        .query<{ name: string }, [string]>(
+          "SELECT DISTINCT name FROM cards WHERE name LIKE ?1",
+        )
+        .all(likePattern);
+      if (untypedLike.length > 0) {
+        return [];
+      }
+    }
+
+    // No LIKE matches at all — likely a typo. Scan all names in the target type.
+    let allNames: string[];
+    if (binderType) {
+      allNames = db
+        .query<{ name: string }, [string]>(
+          "SELECT DISTINCT name FROM cards WHERE binder_type = ?1",
+        )
+        .all(binderType)
+        .map((r) => r.name);
+    } else {
+      allNames = db
+        .query<{ name: string }, []>(
+          "SELECT DISTINCT name FROM cards",
+        )
+        .all()
+        .map((r) => r.name);
+    }
     matchedNames = findClosestMatches(query, allNames, limit);
   }
 
@@ -171,10 +220,22 @@ export function searchCardsByName(
   const orderCases = matchedNames
     .map((_, idx) => `WHEN ?${matchedNames.length + idx + 1} THEN ${idx}`)
     .join(" ");
+
+  if (binderType) {
+    const typeIdx = matchedNames.length * 2 + 1;
+    const rows = db
+      .query<CardRow, string[]>(
+        `SELECT * FROM cards WHERE name IN (${placeholders}) AND binder_type = ?${typeIdx}
+         ORDER BY CASE name ${orderCases} END, set_name`,
+      )
+      .all(...matchedNames, ...matchedNames, binderType);
+    return rows.map(rowToCard);
+  }
+
   const rows = db
     .query<CardRow, string[]>(
       `SELECT * FROM cards WHERE name IN (${placeholders})
-       ORDER BY CASE name ${orderCases} END, set_name`
+       ORDER BY CASE name ${orderCases} END, set_name`,
     )
     .all(...matchedNames, ...matchedNames);
 
@@ -191,7 +252,7 @@ export function listDecks(db: Database): Deck[] {
        FROM cards
        WHERE binder_type = 'deck'
        GROUP BY binder_name
-       ORDER BY binder_name`
+       ORDER BY binder_name`,
     )
     .all();
 
@@ -204,11 +265,11 @@ export function listDecks(db: Database): Deck[] {
  */
 export function getDeckCards(
   db: Database,
-  deckName: string
+  deckName: string,
 ): { resolvedName: string; cards: Card[] } | null {
   const allDeckNames = db
     .query<{ binder_name: string }, []>(
-      "SELECT DISTINCT binder_name FROM cards WHERE binder_type = 'deck'"
+      "SELECT DISTINCT binder_name FROM cards WHERE binder_type = 'deck'",
     )
     .all()
     .map((r) => r.binder_name);
@@ -225,7 +286,7 @@ export function getDeckCards(
     .query<CardRow, [string]>(
       `SELECT * FROM cards
        WHERE binder_type = 'deck' AND binder_name = ?1
-       ORDER BY name`
+       ORDER BY name`,
     )
     .all(resolvedName);
 

@@ -24,7 +24,9 @@ export function createMcpServer(db: Database): McpServer {
       description:
         "Search for a Magic: The Gathering card by name in the collection. " +
         "Uses fuzzy matching to find the closest card names. " +
-        "Returns all printings owned that match, with set, rarity, quantity, and condition info.",
+        "Each result includes the binder or deck the card is in (binderName, binderType), " +
+        "so this tool can answer questions like 'which decks contain card X?' in a single call. " +
+        "Use the binderType filter to restrict results to only decks or only binder cards.",
       inputSchema: {
         query: z.string().describe("Card name or partial name to search for"),
         limit: z
@@ -35,10 +37,19 @@ export function createMcpServer(db: Database): McpServer {
           .optional()
           .default(5)
           .describe("Maximum number of distinct card names to return"),
+        binderType: z
+          .enum(["binder", "deck"])
+          .optional()
+          .describe(
+            "Filter results by location type. " +
+            "Use 'deck' to find which Commander decks contain a card. " +
+            "Use 'binder' to find cards in the sorted collection. " +
+            "Omit to search everywhere."
+          ),
       },
     },
-    async ({ query, limit }) => {
-      const cards = searchCardsByName(db, query, limit);
+    async ({ query, limit, binderType }) => {
+      const cards = searchCardsByName(db, query, limit, binderType);
       if (cards.length === 0) {
         return {
           content: [
