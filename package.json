@@ -1,5 +1,5 @@
 {
-  "name": "manabox-mcp",
+  "name": "mtcg-mcp",
   "module": "index.ts",
   "type": "module",
   "private": true,
