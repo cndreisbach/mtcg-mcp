@@ -5,26 +5,19 @@ name: Node.js CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        node-version: [18.x, 20.x, 22.x]
-        # See supported Node.js release schedule at https://nodejs.org/en/about/releases/
-
     steps:
-    - uses: actions/checkout@v4
-      name: Setup Bun
-    - uses: oven-sh/setup-bun@v2.1.2
-      with:
-        # The version of Bun to install from file. (e.g. "package.json", ".bun-version", ".tool-versions")
-        bun-version-file: .bun-version  
-    - run: bun install
-    - run: bun test 
+      - uses: actions/checkout@v4
+        name: Setup Bun
+      - uses: oven-sh/setup-bun@v2.1.2
+        with:
+          # The version of Bun to install from file. (e.g. "package.json", ".bun-version", ".tool-versions")
+          bun-version-file: .bun-version
+      - run: bun install
+      - run: bun test
