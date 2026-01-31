@@ -1,7 +1,7 @@
 import type { ScryfallCard, ScryfallRuling } from "./types.ts";
 
 const SCRYFALL_API = "https://api.scryfall.com";
-const USER_AGENT = "manabox-mcp/1.0.0";
+const USER_AGENT = "mtcg-mcp/1.0.0";
 const MIN_REQUEST_INTERVAL_MS = 100;
 const RETRY_DELAY_MS = 1000;
 
@@ -47,7 +47,7 @@ async function throttledFetch(url: string): Promise<Response> {
 async function handleScryfallError(response: Response): Promise<never> {
   let message = `Scryfall API error: ${response.status}`;
   try {
-    const body = await response.json();
+    const body = (await response.json()) as { details: unknown };
     if (body.details) {
       message = `Scryfall: ${body.details}`;
     }
@@ -124,7 +124,11 @@ export async function fetchScryfallSearch(
     await handleScryfallError(response);
   }
 
-  const body = await response.json();
+  const body = (await response.json()) as {
+    data: Record<string, unknown>[];
+    has_more: boolean;
+    total_cards: number;
+  };
   return {
     cards: (body.data as Record<string, unknown>[]).map(trimCardResponse),
     hasMore: body.has_more ?? false,
@@ -146,7 +150,7 @@ export async function fetchScryfallCardById(
     await handleScryfallError(response);
   }
 
-  const body = await response.json();
+  const body = (await response.json()) as Record<string, unknown>;
   return trimCardResponse(body);
 }
 
@@ -168,7 +172,7 @@ export async function fetchScryfallCardByName(
     await handleScryfallError(response);
   }
 
-  const body = await response.json();
+  const body = (await response.json()) as Record<string, unknown>;
   return trimCardResponse(body);
 }
 
@@ -186,6 +190,6 @@ export async function fetchScryfallRulings(
     await handleScryfallError(response);
   }
 
-  const body = await response.json();
+  const body = (await response.json()) as { data: Record<string, unknown>[] };
   return (body.data as Record<string, unknown>[]).map(trimRulingResponse);
 }
