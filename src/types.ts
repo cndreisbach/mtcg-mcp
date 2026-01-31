@@ -29,3 +29,30 @@ export type Config = {
   inMemory: boolean;
   port: number;
 };
+
+/** Trimmed Scryfall card — only the fields useful for gameplay and deckbuilding. */
+export type ScryfallCard = {
+  id: string;
+  name: string;
+  manaCost: string;
+  cmc: number;
+  typeLine: string;
+  oracleText: string;
+  power?: string;
+  toughness?: string;
+  colors: string[];
+  colorIdentity: string[];
+  keywords: string[];
+  legalities: Record<string, string>;
+  rarity: string;
+  setName: string;
+  setCode: string;
+  scryfallUri: string;
+  edhrecRank?: number;
+};
+
+export type ScryfallRuling = {
+  source: string;
+  publishedAt: string;
+  comment: string;
+};
