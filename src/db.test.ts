@@ -106,7 +106,7 @@ describe("importCards", () => {
     freshDb.close();
   });
 
-  test("round-trips card data correctly", () => {
+  test("round-trips card summary correctly", () => {
     const results = searchCardsByName(db, "Counterspell", 1);
     expect(results.length).toBe(1);
 
@@ -114,8 +114,8 @@ describe("importCards", () => {
     expect(card.name).toBe("Counterspell");
     expect(card.binderName).toBe("Trade Binder");
     expect(card.binderType).toBe("binder");
-    expect(card.misprint).toBe(false);
-    expect(card.altered).toBe(false);
+    expect(card.quantity).toBe(1);
+    expect(card.scryfallId).toBe("aaaa-bbbb-cccc");
   });
 });
 
@@ -160,11 +160,11 @@ describe("searchCardsByName", () => {
     emptyDb.close();
   });
 
-  test("returns multiple printings of the same card", () => {
+  test("returns multiple copies of the same card from different locations", () => {
     const results = searchCardsByName(db, "Sol Ring", 1);
     expect(results.length).toBe(2);
-    const setCodes = results.map((c) => c.setCode).sort();
-    expect(setCodes).toEqual(["C20", "C21"]);
+    const binders = results.map((c) => c.binderName).sort();
+    expect(binders).toEqual(["Boxed", "Zurgo"]);
   });
 
   test("filters by binderType 'deck'", () => {

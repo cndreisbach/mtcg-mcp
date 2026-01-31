@@ -18,6 +18,15 @@ export type Card = {
   purchasePriceCurrency: string;
 };
 
+/** Lean card summary returned by collection query tools. */
+export type CardSummary = {
+  binderType: "binder" | "deck";
+  binderName: string;
+  quantity: number;
+  name: string;
+  scryfallId: string;
+};
+
 export type Deck = {
   name: string;
   cardCount: number;

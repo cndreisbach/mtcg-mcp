@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import type { Card, Deck } from "./types.ts";
+import type { Card, CardSummary, Deck } from "./types.ts";
 import { findClosestMatches } from "./fuzzy.ts";
 
 const SCHEMA = `
@@ -68,6 +68,24 @@ function rowToCard(row: CardRow): Card {
     condition: row.condition,
     language: row.language,
     purchasePriceCurrency: row.purchase_price_currency,
+  };
+}
+
+type CardSummaryRow = {
+  binder_type: string;
+  binder_name: string;
+  quantity: number;
+  name: string;
+  scryfall_id: string;
+};
+
+function rowToCardSummary(row: CardSummaryRow): CardSummary {
+  return {
+    binderType: row.binder_type as CardSummary["binderType"],
+    binderName: row.binder_name,
+    quantity: row.quantity,
+    name: row.name,
+    scryfallId: row.scryfall_id,
   };
 }
 
@@ -149,7 +167,7 @@ export function searchCardsByName(
   query: string,
   limit = 5,
   binderType?: "binder" | "deck",
-): Card[] {
+): CardSummary[] {
   // Phase 1: LIKE substring match on distinct names
   const likePattern = `%${query}%`;
   let likeResults: string[];
@@ -221,25 +239,27 @@ export function searchCardsByName(
     .map((_, idx) => `WHEN ?${matchedNames.length + idx + 1} THEN ${idx}`)
     .join(" ");
 
+  const summaryColumns = "binder_type, binder_name, quantity, name, scryfall_id";
+
   if (binderType) {
     const typeIdx = matchedNames.length * 2 + 1;
     const rows = db
-      .query<CardRow, string[]>(
-        `SELECT * FROM cards WHERE name IN (${placeholders}) AND binder_type = ?${typeIdx}
+      .query<CardSummaryRow, string[]>(
+        `SELECT ${summaryColumns} FROM cards WHERE name IN (${placeholders}) AND binder_type = ?${typeIdx}
          ORDER BY CASE name ${orderCases} END, set_name`,
       )
       .all(...matchedNames, ...matchedNames, binderType);
-    return rows.map(rowToCard);
+    return rows.map(rowToCardSummary);
   }
 
   const rows = db
-    .query<CardRow, string[]>(
-      `SELECT * FROM cards WHERE name IN (${placeholders})
+    .query<CardSummaryRow, string[]>(
+      `SELECT ${summaryColumns} FROM cards WHERE name IN (${placeholders})
        ORDER BY CASE name ${orderCases} END, set_name`,
     )
     .all(...matchedNames, ...matchedNames);
 
-  return rows.map(rowToCard);
+  return rows.map(rowToCardSummary);
 }
 
 /**
@@ -266,7 +286,7 @@ export function listDecks(db: Database): Deck[] {
 export function getDeckCards(
   db: Database,
   deckName: string,
-): { resolvedName: string; cards: Card[] } | null {
+): { resolvedName: string; cards: CardSummary[] } | null {
   const allDeckNames = db
     .query<{ binder_name: string }, []>(
       "SELECT DISTINCT binder_name FROM cards WHERE binder_type = 'deck'",
@@ -283,8 +303,8 @@ export function getDeckCards(
   if (!resolvedName) return null;
 
   const rows = db
-    .query<CardRow, [string]>(
-      `SELECT * FROM cards
+    .query<CardSummaryRow, [string]>(
+      `SELECT binder_type, binder_name, quantity, name, scryfall_id FROM cards
        WHERE binder_type = 'deck' AND binder_name = ?1
        ORDER BY name`,
     )
@@ -292,6 +312,6 @@ export function getDeckCards(
 
   return {
     resolvedName,
-    cards: rows.map(rowToCard),
+    cards: rows.map(rowToCardSummary),
   };
 }
